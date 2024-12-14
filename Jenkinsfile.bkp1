@@ -1,0 +1,134 @@
+pipeline {
+    agent {
+        label 'AGENT-1'
+    }
+
+    options {
+        timeout(time: 10, unit: 'SECONDS')
+        disableConcurrentBuilds()
+        // retry(1)
+    }
+
+    parameters {
+         booleanParam(name: 'deploy', defaultValue: false, description: 'select to deploy or not')
+    }
+
+    
+    environment {
+        DEBUG = 'true'
+        appVersion = '' // this will become global, we can use across pipeline
+        region = 'us-east-1'
+        account-id = '337909750491'
+        project= 'expense'
+        environment = 'dev'
+        component= 'backend'
+    }
+      
+      stages{
+        stage('Read the version') {
+            steps {
+                script{
+                    def packageJson = readJSON file: 'package.json'
+                    appVersion = packageJson.version
+                    echo "App version: ${appVersion}"
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            } 
+        }
+
+         stage('Docker build') {
+            
+            steps {
+                withAWS(region: 'us-east-1', credentials: 'aws-creds') {
+                    sh """
+                    aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${account_id}.dkr.ecr.us-east-1.amazonaws.com
+
+                    docker build -t ${account_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${environment}/${component}:${appVersion} .
+
+                    docker images
+
+                    docker push ${account_id}.dkr.ecr.us-east-1.amazonaws.com/${project}/${environment}/${component}:${appVersion}
+                    """
+                }
+            }
+
+         }
+        
+        //  stage('SonarQube analysis') {
+        //     environment {
+        //         SCANNER_HOME = tool ('sonar6.0') //which means inject sonar scanner tool in this stage
+        //     }
+        //     steps {
+        //          // sonar server injection
+        //          withSonarQubeEnv('sonar6.0') {
+        //             // we should provide properties to sonar like project name , soruce code destination etc
+        //             sh ' $SCANNER_HOME/bin/sonar-scanner'
+        //             //generic scanner, oit automatically understands the language and provides sca results
+        //          }
+        //     }
+        //  }
+       
+        //  stage('Quality Gate'){
+        //     steps{
+        //         timeout(time: 5, unit: 'MINUTES'){
+        //         waitForQualityGate abortPipeline: true
+        //         }
+        //     }
+        //  }
+
+
+ 
+         stage('deploy') {
+
+            when {
+                 expression { params.deploy }
+            }
+            steps{
+        
+                  build job: 'backend-deploy', parameters: 
+                  [string(name: 'version', value: "${appVersion}"),
+                  string(name:'ENVIRONMENT', value: 'dev'),
+                  ], wait: true
+                }
+
+            }
+         }
+
+        
+
+
+
+         // stage('Approval'){
+        //     input {
+        //         message "Should we continue?"
+        //         ok "Yes, we should."
+        //         submitter "alice,bob"
+        //         parameters {
+        //             string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
+        //         }
+        //     }
+        //     steps {
+        //         echo "Hello, ${PERSON}, nice to meet you."
+        //     }
+        // }
+    
+    post {
+        always {
+            echo " this section always runs"
+             deleteDir()
+        }
+
+        success {
+            echo " this section runs when pipeline is success"
+        }
+        failure {
+            echo " this section runs when pipeline is failed"
+        }
+    }
+
+}

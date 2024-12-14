@@ -1,0 +1,8 @@
+deployment:
+ imageVersion: IMAGE_VERSION
+ imageURL: 337909750491.dkr.ecr.us-east-1.amazonaws.com/expense/dev/backend
+configmap:
+ db_host: expense-dev.czn6yzxlcsiv.us-east-1.rds.amazonaws.com
+hpa:
+ CPUUtilization: 15
+ 
